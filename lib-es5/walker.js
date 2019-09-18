@@ -121,7 +121,7 @@ class Walker {
   append(task) {
     const normalizedFilePath = (0, _common.normalizePath)(task.file);
 
-    if (this.ignoredFiles.includes(normalizedFilePath)) {
+    if (this.ignoredFiles.includes(normalizedFilePath.replace(/\\/g, '/'))) {
       return;
     }
 
