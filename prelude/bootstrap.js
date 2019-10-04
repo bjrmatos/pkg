@@ -12,6 +12,7 @@
 /* global REQUIRE_COMMON */
 /* global VIRTUAL_FILESYSTEM */
 /* global DEFAULT_ENTRYPOINT */
+/* global BASEDIR */
 
 'use strict';
 
@@ -40,6 +41,15 @@ var NODE_VERSION_MAJOR = process.version.match(/^v(\d+)/)[1] | 0;
 var ARGV0 = process.argv[0];
 var EXECPATH = process.execPath;
 var ENTRYPOINT = process.argv[1];
+
+var nodePathSeparator = process.platform === 'win32' ? ';' : ':';
+
+if (BASEDIR) {
+  // eslint-disable-next-line
+  process.env.NODE_PATH = process.env.NODE_PATH != null ? process.env.NODE_PATH + nodePathSeparator : '';
+  process.env.NODE_PATH += require('path').join(process.cwd(), 'node_modules') + nodePathSeparator;
+  process.env.NODE_PATH += require('path').join(BASEDIR, 'node_modules');
+}
 
 if (process.env.PKG_EXECPATH === 'PKG_INVOKE_NODEJS') {
   return { undoPatch: true };
@@ -356,6 +366,7 @@ function payloadFileSync (pointer) {
   process.pkg.mount = createMountpoint;
   process.pkg.entrypoint = ENTRYPOINT;
   process.pkg.defaultEntrypoint = DEFAULT_ENTRYPOINT;
+  process.pkg.baseDir = BASEDIR;
 }());
 
 // /////////////////////////////////////////////////////////////////

@@ -107,12 +107,21 @@ function _default({
   bakes,
   vfsFullOutput,
   vfsOutput,
+  baseDir,
   slash,
   target
 }) {
   return new Promise((resolve, reject) => {
     if (!Buffer.alloc) {
       throw (0, _log.wasReported)('Your node.js does not have Buffer.alloc. Please upgrade!');
+    }
+
+    let baseDirPath;
+
+    if (baseDir) {
+      baseDirPath = (0, _common.snapshotify)(baseDir, slash);
+    } else {
+      baseDirPath = '';
     }
 
     let {
@@ -209,7 +218,7 @@ function _default({
         } else {
           payloadSize = track;
           preludePosition = payloadPosition + payloadSize;
-          return cb(undefined, next((0, _intoStream.default)(makePreludeBufferFromPrelude(replaceDollarWise(replaceDollarWise(prelude, '%VIRTUAL_FILESYSTEM%', JSON.stringify(vfs)), '%DEFAULT_ENTRYPOINT%', JSON.stringify(entrypoint))))));
+          return cb(undefined, next((0, _intoStream.default)(makePreludeBufferFromPrelude(replaceDollarWise(replaceDollarWise(replaceDollarWise(prelude, '%VIRTUAL_FILESYSTEM%', JSON.stringify(vfs)), '%DEFAULT_ENTRYPOINT%', JSON.stringify(entrypoint)), '%BASEDIR%', JSON.stringify(baseDirPath))))));
         }
       } else {
         return cb();

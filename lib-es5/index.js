@@ -200,7 +200,7 @@ function _exec() {
   _exec = (0, _asyncToGenerator2.default)(function* (argv2) {
     // eslint-disable-line complexity
     const argv = (0, _minimist.default)(argv2, {
-      boolean: ['b', 'build', 'bytecode', 'd', 'debug', 'h', 'help', 'public', 'v', 'version'],
+      boolean: ['b', 'build', 'bytecode', 'd', 'debug', 'h', 'help', 'public', 'v', 'version', 'externalModules'],
       string: ['_', 'c', 'config', 'o', 'options', 'output', 'outdir', 'out-dir', 'out-path', 'public-packages', 't', 'target', 'targets'],
       default: {
         bytecode: true
@@ -494,6 +494,14 @@ function _exec() {
     const refineResult = (0, _refiner.default)(records, entrypoint);
     entrypoint = refineResult.entrypoint;
     records = refineResult.records;
+    let baseDir;
+
+    if (argv.externalModules === true) {
+      _log.log.debug('Require of external modules will be allowed..');
+
+      baseDir = Object.keys(records).find(pathKey => records[pathKey].file === marker.base);
+    }
+
     const backpack = (0, _packer.default)({
       records,
       entrypoint,
@@ -521,6 +529,7 @@ function _exec() {
         vfsOutput,
         vfsFullOutput,
         bakes,
+        baseDir,
         slash,
         target
       });
