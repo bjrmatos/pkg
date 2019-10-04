@@ -155,7 +155,7 @@ function _default({
     }
   }
 
-  const prelude = 'return (function (REQUIRE_COMMON, VIRTUAL_FILESYSTEM, DEFAULT_ENTRYPOINT) { ' + bootstrapText + '\n})(function (exports) {\n' + commonText + '\n},\n' + '%VIRTUAL_FILESYSTEM%' + '\n,\n' + '%DEFAULT_ENTRYPOINT%' + '\n);';
+  const prelude = 'return (function (REQUIRE_COMMON, VIRTUAL_FILESYSTEM, DEFAULT_ENTRYPOINT, BASEDIR) { ' + bootstrapText + '\n})(function (exports) {\n' + commonText + '\n},\n' + '%VIRTUAL_FILESYSTEM%' + '\n,\n' + '%DEFAULT_ENTRYPOINT%' + '\n,\n' + '%BASEDIR%' + '\n);';
   return {
     prelude,
     entrypoint,
