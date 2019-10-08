@@ -49,6 +49,15 @@ if (BASEDIR) {
   process.env.NODE_PATH = process.env.NODE_PATH != null ? process.env.NODE_PATH + nodePathSeparator : '';
   process.env.NODE_PATH += require('path').join(process.cwd(), 'node_modules') + nodePathSeparator;
   process.env.NODE_PATH += require('path').join(BASEDIR, 'node_modules');
+
+  var exModule = require('module').Module;
+
+  if (typeof exModule._initPaths !== 'function') {
+    throw new Error('Module._initPaths is not available in this version of Node!, it is needed to allow require of external modules outside of the executable, make sure to compile with node version in which Module._initPaths is supported');
+  }
+
+  // needed to make the NODE_PATH be recognized on windows
+  exModule._initPaths();
 }
 
 if (process.env.PKG_EXECPATH === 'PKG_INVOKE_NODEJS') {
