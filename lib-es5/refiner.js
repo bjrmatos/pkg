@@ -11,6 +11,8 @@ var _common = require("../prelude/common.js");
 
 var _path = _interopRequireDefault(require("path"));
 
+const win32 = process.platform === 'win32';
+
 function hasParent(file, records) {
   const dirname = _path.default.dirname(file);
 
@@ -52,8 +54,6 @@ function purgeTopDirectories(records) {
     if (!found) break;
   }
 }
-
-const win32 = process.platform === 'win32';
 
 function denominate(records, entrypoint, denominator) {
   const newRecords = {};

@@ -11,6 +11,8 @@ var _common = require("../prelude/common.js");
 
 var _log = require("./log.js");
 
+var _multistream = _interopRequireDefault(require("multistream"));
+
 var _assert = _interopRequireDefault(require("assert"));
 
 var _fabricator = require("./fabricator.js");
@@ -18,8 +20,6 @@ var _fabricator = require("./fabricator.js");
 var _fs = _interopRequireDefault(require("fs"));
 
 var _intoStream = _interopRequireDefault(require("into-stream"));
-
-var _multistream = _interopRequireDefault(require("multistream"));
 
 var _streamMeter = _interopRequireDefault(require("stream-meter"));
 
@@ -163,7 +163,7 @@ function _default({
     let payloadSize;
     let preludePosition;
     let preludeSize;
-    (0, _multistream.default)(cb => {
+    new _multistream.default(cb => {
       if (count === 0) {
         return cb(undefined, next((0, _intoStream.default)(binaryBuffer)));
       } else if (count === 1) {
