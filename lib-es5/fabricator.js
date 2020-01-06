@@ -53,7 +53,8 @@ const children = {};
 function fabricate(bakes, fabricator, snap, body, cb) {
   bakes = bakes.filter(function (bake) {
     // list of bakes that don't influence the bytecode
-    return !['--prof', '--v8-options'].includes(bake);
+    const bake2 = bake.replace(/_/g, '-');
+    return !['--prof', '--v8-options', '--trace-opt', '--trace-deopt'].includes(bake2);
   });
   const cmd = fabricator.binaryPath;
   const key = JSON.stringify([cmd, bakes]);

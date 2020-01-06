@@ -39,6 +39,7 @@ var _package = require("../package.json");
 
 var _walker = _interopRequireDefault(require("./walker.js"));
 
+/* eslint-disable require-atomic-updates */
 function isConfiguration(file) {
   return (0, _common.isPackageJson)(file) || file.endsWith('.config.json');
 } // http://www.openwall.com/lists/musl/2012/12/08/4

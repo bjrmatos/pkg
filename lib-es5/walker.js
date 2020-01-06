@@ -11,29 +11,25 @@ var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/
 
 var _common = require("../prelude/common.js");
 
+var _follow = require("./follow.js");
+
 var _log = require("./log.js");
 
 var _assert = _interopRequireDefault(require("assert"));
 
 var _detector = _interopRequireDefault(require("./detector.js"));
 
-var _follow = _interopRequireDefault(require("./follow.js"));
-
 var _fsExtra = _interopRequireDefault(require("fs-extra"));
 
 var _globby = _interopRequireDefault(require("globby"));
 
-var _natives = _interopRequireDefault(require("./natives.js"));
-
 var _path = _interopRequireDefault(require("path"));
 
-function shortFromAlias(alias) {
-  // alias = fs-promise or @types/node
-  if (alias[0] === '@') {
-    return alias.match(/^([^\\/]+[\\/][^\\/]+)/)[0];
-  } else {
-    return alias.match(/^[^\\/]+/)[0];
-  }
+/* eslint-disable require-atomic-updates */
+const win32 = process.platform === 'win32';
+
+function unlikelyJavascript(file) {
+  return ['.css', '.html', '.json'].includes(_path.default.extname(file));
 }
 
 function isPublic(config) {
@@ -84,6 +80,10 @@ function upon(p, base) {
   }
 
   p = _path.default.join(base, p);
+
+  if (win32) {
+    p = p.replace(/\\/g, '/');
+  }
 
   if (negate) {
     p = '!' + p;
@@ -497,76 +497,48 @@ class Walker {
 
     return (0, _asyncToGenerator2.default)(function* () {
       // eslint-disable-line camelcase
-      const catcher = {};
       let stage = 0;
       let newPackage;
-      let newMarker;
+      let newMarker; // was taken from resolve/lib/sync.js
 
-      catcher.readFileSync = file => {
-        // only first occurence from loadNodeModulesSync
-        if (stage === 2) return;
-        (0, _assert.default)(stage === 0);
+      const isNear = /^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\/])/;
+      const near = isNear.test(derivative.alias);
+
+      const catchReadFile = file => {
+        if (near) return;
+        if (stage !== 0) return;
         (0, _assert.default)((0, _common.isPackageJson)(file), 'walker: ' + file + ' must be package.json');
         newPackage = file;
         newMarker = undefined;
         stage = 1;
-        return _fsExtra.default.readFileSync(file);
       };
 
-      catcher.packageFilter = (config, base) => {
-        (0, _assert.default)(stage === 1);
+      const catchPackageFilter = (config, base) => {
+        if (near) return;
+        if (stage !== 1) return;
         newMarker = {
           config,
           configPath: newPackage,
           base
         };
         stage = 2;
-        return config;
       };
 
       let newFile, failure;
 
       try {
-        newFile = yield (0, _follow.default)(derivative.alias, {
+        newFile = yield (0, _follow.follow)(derivative.alias, {
           basedir: _path.default.dirname(record.file),
           // default is extensions: ['.js'], but
           // it is not enough because 'typos.json'
           // is not taken in require('./typos')
           // in 'normalize-package-data/lib/fixer.js'
           extensions: ['.js', '.json', '.node'],
-          readFileSync: catcher.readFileSync,
-          packageFilter: catcher.packageFilter
+          readFile: catchReadFile,
+          packageFilter: catchPackageFilter
         });
       } catch (error) {
         failure = error;
-      } // was taken from resolve/lib/sync.js
-
-
-      const isNear = /^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\/])/;
-      let mainNotFound = false;
-
-      if (!isNear.test(derivative.alias)) {
-        const short = shortFromAlias(derivative.alias); // 'npm' !== 'npm/bin/npm-cli.js'
-
-        if (short !== derivative.alias) {
-          try {
-            yield (0, _follow.default)(short, {
-              basedir: _path.default.dirname(record.file),
-              extensions: ['.js', '.json', '.node'],
-              readFileSync: catcher.readFileSync,
-              packageFilter: catcher.packageFilter
-            });
-          } catch (error) {// the purpose is to fire 'packageFilter'
-            // in cases like require('npm/bin/npm-cli.js')
-            // because otherwise it will not be fired
-            // (only loadAsFileSync is executed)
-          }
-        } // 'babel-runtime' === 'babel-runtime'
-
-
-        if (short === derivative.alias) {
-          mainNotFound = failure && newMarker && newMarker.config && !newMarker.config.main;
-        }
       }
 
       (0, _assert.default)(newPackage && newMarker || !newPackage && !newMarker, 'Probably, package.json is malformed');
@@ -584,6 +556,7 @@ class Walker {
         const {
           toplevel
         } = marker;
+        const mainNotFound = !newFile && newMarker;
         const debug = !toplevel || derivative.mayExclude || mainNotFound && derivative.fromDependencies;
         const level = debug ? 'debug' : 'warn';
 
@@ -612,7 +585,7 @@ class Walker {
 
     return (0, _asyncToGenerator2.default)(function* () {
       for (const derivative of derivatives) {
-        if (_natives.default[derivative.alias]) continue;
+        if (_follow.natives[derivative.alias]) continue;
 
         if (derivative.aliasType === _common.ALIAS_AS_RELATIVE) {
           yield _this5.stepDerivatives_ALIAS_AS_RELATIVE(record, marker, derivative);
@@ -653,7 +626,7 @@ class Walker {
       yield _this6.stepDerivatives(record, marker, derivatives1);
 
       if (store === _common.STORE_BLOB) {
-        if ((0, _common.isDotJSON)(record.file)) {
+        if (unlikelyJavascript(record.file)) {
           _this6.append({
             file: record.file,
             marker,
