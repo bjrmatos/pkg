@@ -1,7 +1,5 @@
 "use strict";
 
-var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault");
-
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
@@ -16,6 +14,8 @@ var _assert = _interopRequireDefault(require("assert"));
 var _fsExtra = _interopRequireDefault(require("fs-extra"));
 
 var _package = require("../package.json");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /* eslint-disable complexity */
 const bootstrapText = _fsExtra.default.readFileSync(require.resolve('../prelude/bootstrap.js'), 'utf8').replace('%VERSION%', _package.version);
