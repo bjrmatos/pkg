@@ -329,7 +329,7 @@ module.exports.parse = function (body) {
     allowImportExportEverywhere: true,
     allowReturnOutsideFunction: true,
     ecmaVersion: 8,
-    plugins: ['estree']
+    plugins: ['estree', 'bigInt']
   });
 };
 

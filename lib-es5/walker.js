@@ -134,9 +134,9 @@ class Walker {
     }[task.store];
 
     if (task.reason) {
-      _log.log.debug(what + ' %1 is added to queue. It was required from %2', [task.file, task.reason]);
+      _log.log.debug(what + ' %1 is added to queue. It was required from %2', ['%1: ' + task.file, '%2: ' + task.reason]);
     } else {
-      _log.log.debug(what + ' %1 is added to queue', [task.file]);
+      _log.log.debug(what + ' %1 is added to queue', ['%1: ' + task.file]);
     }
   }
 
@@ -299,7 +299,7 @@ class Walker {
         for (const deployFile of deployFiles) {
           const type = deployFile[2] || 'file';
 
-          _log.log.warn(`Cannot include ${type} %1 into executable.`, [`The ${type} must be distributed with executable as %2.`, _path.default.relative(process.cwd(), _path.default.join(base, deployFile[0])), 'path-to-executable/' + deployFile[1]]);
+          _log.log.warn(`Cannot include ${type} %1 into executable.`, [`The ${type} must be distributed with executable as %2.`, '%1: ' + _path.default.relative(process.cwd(), _path.default.join(base, deployFile[0])), '%2: path-to-executable/' + deployFile[1]]);
         }
       }
 
@@ -483,7 +483,8 @@ class Walker {
     let newMarker; // was taken from resolve/lib/sync.js
 
     const isNear = /^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\/])/;
-    const near = isNear.test(derivative.alias);
+    const intoNodeModules = /\/node_modules\//;
+    const near = isNear.test(derivative.alias) && !intoNodeModules.test(derivative.alias);
 
     const catchReadFile = file => {
       if (near) return;
@@ -544,9 +545,9 @@ class Walker {
       if (mainNotFound) {
         const message = 'Entry \'main\' not found in %1';
 
-        _log.log[level](message, [newPackage, record.file]);
+        _log.log[level](message, ['%1: ' + newPackage, '%2: ' + record.file]);
       } else {
-        _log.log[level](failure.message, [record.file]);
+        _log.log[level](failure.message, ['%1: ' + record.file]);
       }
 
       return;
@@ -588,7 +589,7 @@ class Walker {
       // provide explicit deployFiles to override
       // native addon deployment place. see 'sharp'
       if (!marker.hasDeployFiles) {
-        _log.log.warn('Cannot include addon %1 into executable.', ['The addon must be distributed with executable as %2.', record.file, 'path-to-executable/' + _path.default.basename(record.file)]);
+        _log.log.warn('Cannot include addon %1 into executable.', ['The addon must be distributed with executable as %2.', '%1: ' + record.file, '%2: path-to-executable/' + _path.default.basename(record.file)]);
       }
 
       return; // discard
