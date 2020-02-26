@@ -1,7 +1,5 @@
 "use strict";
 
-var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault");
-
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
@@ -13,6 +11,8 @@ var _resolve = require("resolve");
 var _assert = _interopRequireDefault(require("assert"));
 
 var _fs = _interopRequireDefault(require("fs"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 Object.keys(_resolve.core).forEach(key => {
   // 'resolve' hardcodes the list to host's one, but i need

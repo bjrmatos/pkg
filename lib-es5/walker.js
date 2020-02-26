@@ -1,13 +1,9 @@
 "use strict";
 
-var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault");
-
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.default = _default;
-
-var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
 
 var _common = require("../prelude/common.js");
 
@@ -24,6 +20,8 @@ var _fsExtra = _interopRequireDefault(require("fs-extra"));
 var _globby = _interopRequireDefault(require("globby"));
 
 var _path = _interopRequireDefault(require("path"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /* eslint-disable require-atomic-updates */
 const win32 = process.platform === 'win32';
@@ -136,62 +134,91 @@ class Walker {
     }[task.store];
 
     if (task.reason) {
-      _log.log.debug(what + ' %1 is added to queue. It was required from %2', [task.file, task.reason]);
+      _log.log.debug(what + ' %1 is added to queue. It was required from %2', ['%1: ' + task.file, '%2: ' + task.reason]);
     } else {
-      _log.log.debug(what + ' %1 is added to queue', [task.file]);
+      _log.log.debug(what + ' %1 is added to queue', ['%1: ' + task.file]);
     }
   }
 
-  appendFilesFromConfig(marker) {
-    var _this = this;
+  async appendFilesFromConfig(marker) {
+    const {
+      config,
+      configPath,
+      base
+    } = marker;
+    const pkgConfig = config.pkg;
 
-    return (0, _asyncToGenerator2.default)(function* () {
-      const {
-        config,
-        configPath,
-        base
-      } = marker;
-      const pkgConfig = config.pkg;
+    if (pkgConfig) {
+      let {
+        scripts
+      } = pkgConfig;
 
-      if (pkgConfig) {
-        let {
-          scripts
-        } = pkgConfig;
+      if (scripts) {
+        scripts = expandFiles(scripts, base);
 
-        if (scripts) {
-          scripts = expandFiles(scripts, base);
+        for (const script of scripts) {
+          const stat = await _fsExtra.default.stat(script);
 
-          for (const script of scripts) {
-            const stat = yield _fsExtra.default.stat(script);
-
-            if (stat.isFile()) {
-              if (!(0, _common.isDotJS)(script) && !(0, _common.isDotJSON)(script) & !(0, _common.isDotNODE)(script)) {
-                _log.log.warn('Non-javascript file is specified in \'scripts\'.', ['Pkg will probably fail to parse. Specify *.js in glob.', script]);
-              }
-
-              _this.append({
-                file: script,
-                marker,
-                store: _common.STORE_BLOB,
-                reason: configPath
-              });
+          if (stat.isFile()) {
+            if (!(0, _common.isDotJS)(script) && !(0, _common.isDotJSON)(script) & !(0, _common.isDotNODE)(script)) {
+              _log.log.warn('Non-javascript file is specified in \'scripts\'.', ['Pkg will probably fail to parse. Specify *.js in glob.', script]);
             }
+
+            this.append({
+              file: script,
+              marker,
+              store: _common.STORE_BLOB,
+              reason: configPath
+            });
           }
         }
+      }
 
-        let {
-          assets
-        } = pkgConfig;
+      let {
+        assets
+      } = pkgConfig;
 
-        if (assets) {
-          assets = expandFiles(assets, base);
+      if (assets) {
+        assets = expandFiles(assets, base);
 
-          for (const asset of assets) {
-            const stat = yield _fsExtra.default.stat(asset);
+        for (const asset of assets) {
+          const stat = await _fsExtra.default.stat(asset);
 
-            if (stat.isFile()) {
-              _this.append({
-                file: asset,
+          if (stat.isFile()) {
+            this.append({
+              file: asset,
+              marker,
+              store: _common.STORE_CONTENT,
+              reason: configPath
+            });
+          }
+        }
+      }
+    } else {
+      let {
+        files
+      } = config;
+
+      if (files) {
+        files = expandFiles(files, base);
+
+        for (const file of files) {
+          const stat = await _fsExtra.default.stat(file);
+
+          if (stat.isFile()) {
+            // 1) remove sources of top-level(!) package 'files' i.e. ship as BLOB
+            // 2) non-source (non-js) files of top-level package are shipped as CONTENT
+            // 3) parsing some js 'files' of non-top-level packages fails, hence all CONTENT
+            if (marker.toplevel) {
+              this.append({
+                file,
+                marker,
+                store: (0, _common.isDotJS)(file) ? _common.STORE_BLOB : _common.STORE_CONTENT,
+                reason: configPath
+              });
+            } else {
+              this.append({
+                file,
                 marker,
                 store: _common.STORE_CONTENT,
                 reason: configPath
@@ -199,157 +226,118 @@ class Walker {
             }
           }
         }
-      } else {
-        let {
-          files
-        } = config;
-
-        if (files) {
-          files = expandFiles(files, base);
-
-          for (const file of files) {
-            const stat = yield _fsExtra.default.stat(file);
-
-            if (stat.isFile()) {
-              // 1) remove sources of top-level(!) package 'files' i.e. ship as BLOB
-              // 2) non-source (non-js) files of top-level package are shipped as CONTENT
-              // 3) parsing some js 'files' of non-top-level packages fails, hence all CONTENT
-              if (marker.toplevel) {
-                _this.append({
-                  file,
-                  marker,
-                  store: (0, _common.isDotJS)(file) ? _common.STORE_BLOB : _common.STORE_CONTENT,
-                  reason: configPath
-                });
-              } else {
-                _this.append({
-                  file,
-                  marker,
-                  store: _common.STORE_CONTENT,
-                  reason: configPath
-                });
-              }
-            }
-          }
-        }
       }
-    })();
+    }
   }
 
-  stepActivate(marker, derivatives) {
-    var _this2 = this;
+  async stepActivate(marker, derivatives) {
+    if (!marker) (0, _assert.default)(false);
+    if (marker.activated) return;
+    const {
+      config,
+      base
+    } = marker;
+    if (!config) (0, _assert.default)(false);
+    const {
+      name
+    } = config;
 
-    return (0, _asyncToGenerator2.default)(function* () {
-      if (!marker) (0, _assert.default)(false);
-      if (marker.activated) return;
-      const {
-        config,
-        base
-      } = marker;
-      if (!config) (0, _assert.default)(false);
-      const {
-        name
-      } = config;
+    if (name) {
+      const d = this.dictionary[name];
 
-      if (name) {
-        const d = _this2.dictionary[name];
-
-        if (d) {
-          if (typeof config.dependencies === 'object' && typeof d.dependencies === 'object') {
-            Object.assign(config.dependencies, d.dependencies);
-            delete d.dependencies;
-          }
-
-          Object.assign(config, d);
-          marker.hasDictionary = true;
+      if (d) {
+        if (typeof config.dependencies === 'object' && typeof d.dependencies === 'object') {
+          Object.assign(config.dependencies, d.dependencies);
+          delete d.dependencies;
         }
+
+        Object.assign(config, d);
+        marker.hasDictionary = true;
       }
+    }
 
-      const {
-        dependencies
-      } = config;
+    const {
+      dependencies
+    } = config;
 
-      if (typeof dependencies === 'object') {
-        for (const dependency in dependencies) {
-          // it may be `undefined` - overridden
-          // in dictionary (see publicsuffixlist)
-          if (dependencies[dependency]) {
-            derivatives.push({
-              alias: dependency,
-              aliasType: _common.ALIAS_AS_RESOLVABLE,
-              fromDependencies: true
-            });
-          }
-        }
-      }
-
-      const pkgConfig = config.pkg;
-
-      if (pkgConfig) {
-        const {
-          patches
-        } = pkgConfig;
-
-        if (patches) {
-          for (const key in patches) {
-            const p = _path.default.join(base, key);
-
-            _this2.patches[p] = patches[key];
-          }
-        }
-
-        const {
-          deployFiles
-        } = pkgConfig;
-
-        if (deployFiles) {
-          marker.hasDeployFiles = true;
-
-          for (const deployFile of deployFiles) {
-            const type = deployFile[2] || 'file';
-
-            _log.log.warn(`Cannot include ${type} %1 into executable.`, [`The ${type} must be distributed with executable as %2.`, _path.default.relative(process.cwd(), _path.default.join(base, deployFile[0])), 'path-to-executable/' + deployFile[1]]);
-          }
-        }
-
-        if (pkgConfig.log) {
-          pkgConfig.log(_log.log, {
-            packagePath: base
+    if (typeof dependencies === 'object') {
+      for (const dependency in dependencies) {
+        // it may be `undefined` - overridden
+        // in dictionary (see publicsuffixlist)
+        if (dependencies[dependency]) {
+          derivatives.push({
+            alias: dependency,
+            aliasType: _common.ALIAS_AS_RESOLVABLE,
+            fromDependencies: true
           });
         }
       }
+    }
 
-      yield _this2.appendFilesFromConfig(marker);
-      marker.public = isPublic(config);
+    const pkgConfig = config.pkg;
 
-      if (!marker.public && marker.toplevel) {
-        marker.public = _this2.params.publicToplevel;
+    if (pkgConfig) {
+      const {
+        patches
+      } = pkgConfig;
+
+      if (patches) {
+        for (const key in patches) {
+          const p = _path.default.join(base, key);
+
+          this.patches[p] = patches[key];
+        }
       }
 
-      if (!marker.public && !marker.toplevel && _this2.params.publicPackages) {
-        marker.public = _this2.params.publicPackages[0] === '*' || _this2.params.publicPackages.indexOf(name) !== -1;
+      const {
+        deployFiles
+      } = pkgConfig;
+
+      if (deployFiles) {
+        marker.hasDeployFiles = true;
+
+        for (const deployFile of deployFiles) {
+          const type = deployFile[2] || 'file';
+
+          _log.log.warn(`Cannot include ${type} %1 into executable.`, [`The ${type} must be distributed with executable as %2.`, '%1: ' + _path.default.relative(process.cwd(), _path.default.join(base, deployFile[0])), '%2: path-to-executable/' + deployFile[1]]);
+        }
       }
 
-      marker.activated = true; // assert no further work with config
+      if (pkgConfig.log) {
+        pkgConfig.log(_log.log, {
+          packagePath: base
+        });
+      }
+    }
 
-      delete marker.config;
-    })();
+    await this.appendFilesFromConfig(marker);
+    marker.public = isPublic(config);
+
+    if (!marker.public && marker.toplevel) {
+      marker.public = this.params.publicToplevel;
+    }
+
+    if (!marker.public && !marker.toplevel && this.params.publicPackages) {
+      marker.public = this.params.publicPackages[0] === '*' || this.params.publicPackages.indexOf(name) !== -1;
+    }
+
+    marker.activated = true; // assert no further work with config
+
+    delete marker.config;
   }
 
-  stepRead(record) {
-    return (0, _asyncToGenerator2.default)(function* () {
-      let body;
+  async stepRead(record) {
+    let body;
 
-      try {
-        body = yield _fsExtra.default.readFile(record.file);
-      } catch (error) {
-        _log.log.error('Cannot read file, ' + error.code, record.file);
+    try {
+      body = await _fsExtra.default.readFile(record.file);
+    } catch (error) {
+      _log.log.error('Cannot read file, ' + error.code, record.file);
 
-        throw (0, _log.wasReported)(error);
-      }
+      throw (0, _log.wasReported)(error);
+    }
 
-      record.body = body;
-    })();
+    record.body = body;
   }
 
   hasPatch(record) {
@@ -460,213 +448,194 @@ class Walker {
     }
   }
 
-  stepDerivatives_ALIAS_AS_RELATIVE(record, marker, derivative) {
-    var _this3 = this;
+  async stepDerivatives_ALIAS_AS_RELATIVE(record, marker, derivative) {
+    // eslint-disable-line camelcase
+    const file = _path.default.join(_path.default.dirname(record.file), derivative.alias);
 
-    return (0, _asyncToGenerator2.default)(function* () {
-      // eslint-disable-line camelcase
-      const file = _path.default.join(_path.default.dirname(record.file), derivative.alias);
+    let stat;
 
-      let stat;
+    try {
+      stat = await _fsExtra.default.stat(file);
+    } catch (error) {
+      const {
+        toplevel
+      } = marker;
+      const debug = !toplevel && error.code === 'ENOENT';
+      const level = debug ? 'debug' : 'warn';
 
-      try {
-        stat = yield _fsExtra.default.stat(file);
-      } catch (error) {
-        const {
-          toplevel
-        } = marker;
-        const debug = !toplevel && error.code === 'ENOENT';
-        const level = debug ? 'debug' : 'warn';
+      _log.log[level]('Cannot stat, ' + error.code, [file, 'The file was required from \'' + record.file + '\'']);
+    }
 
-        _log.log[level]('Cannot stat, ' + error.code, [file, 'The file was required from \'' + record.file + '\'']);
-      }
-
-      if (stat && stat.isFile()) {
-        _this3.append({
-          file,
-          marker,
-          store: _common.STORE_CONTENT,
-          reason: record.file
-        });
-      }
-    })();
-  }
-
-  stepDerivatives_ALIAS_AS_RESOLVABLE(record, marker, derivative) {
-    var _this4 = this;
-
-    return (0, _asyncToGenerator2.default)(function* () {
-      // eslint-disable-line camelcase
-      let stage = 0;
-      let newPackage;
-      let newMarker; // was taken from resolve/lib/sync.js
-
-      const isNear = /^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\/])/;
-      const near = isNear.test(derivative.alias);
-
-      const catchReadFile = file => {
-        if (near) return;
-        if (stage !== 0) return;
-        (0, _assert.default)((0, _common.isPackageJson)(file), 'walker: ' + file + ' must be package.json');
-        newPackage = file;
-        newMarker = undefined;
-        stage = 1;
-      };
-
-      const catchPackageFilter = (config, base) => {
-        if (near) return;
-        if (stage !== 1) return;
-        newMarker = {
-          config,
-          configPath: newPackage,
-          base
-        };
-        stage = 2;
-      };
-
-      let newFile, failure;
-
-      try {
-        newFile = yield (0, _follow.follow)(derivative.alias, {
-          basedir: _path.default.dirname(record.file),
-          // default is extensions: ['.js'], but
-          // it is not enough because 'typos.json'
-          // is not taken in require('./typos')
-          // in 'normalize-package-data/lib/fixer.js'
-          extensions: ['.js', '.json', '.node'],
-          readFile: catchReadFile,
-          packageFilter: catchPackageFilter
-        });
-      } catch (error) {
-        failure = error;
-      }
-
-      (0, _assert.default)(newPackage && newMarker || !newPackage && !newMarker, 'Probably, package.json is malformed');
-
-      if (newPackage) {
-        _this4.append({
-          file: newPackage,
-          marker: newMarker,
-          store: _common.STORE_CONTENT,
-          reason: record.file
-        });
-      }
-
-      if (failure) {
-        const {
-          toplevel
-        } = marker;
-        const mainNotFound = !newFile && newMarker;
-        const debug = !toplevel || derivative.mayExclude || mainNotFound && derivative.fromDependencies;
-        const level = debug ? 'debug' : 'warn';
-
-        if (mainNotFound) {
-          const message = 'Entry \'main\' not found in %1';
-
-          _log.log[level](message, [newPackage, record.file]);
-        } else {
-          _log.log[level](failure.message, [record.file]);
-        }
-
-        return;
-      }
-
-      _this4.append({
-        file: newFile,
-        marker: newMarker || marker,
-        store: _common.STORE_BLOB,
+    if (stat && stat.isFile()) {
+      this.append({
+        file,
+        marker,
+        store: _common.STORE_CONTENT,
         reason: record.file
       });
-    })();
+    }
   }
 
-  stepDerivatives(record, marker, derivatives) {
-    var _this5 = this;
+  async stepDerivatives_ALIAS_AS_RESOLVABLE(record, marker, derivative) {
+    // eslint-disable-line camelcase
+    let stage = 0;
+    let newPackage;
+    let newMarker; // was taken from resolve/lib/sync.js
 
-    return (0, _asyncToGenerator2.default)(function* () {
-      for (const derivative of derivatives) {
-        if (_follow.natives[derivative.alias]) continue;
+    const isNear = /^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\/])/;
+    const intoNodeModules = /\/node_modules\//;
+    const near = isNear.test(derivative.alias) && !intoNodeModules.test(derivative.alias);
 
-        if (derivative.aliasType === _common.ALIAS_AS_RELATIVE) {
-          yield _this5.stepDerivatives_ALIAS_AS_RELATIVE(record, marker, derivative);
-        } else if (derivative.aliasType === _common.ALIAS_AS_RESOLVABLE) {
-          yield _this5.stepDerivatives_ALIAS_AS_RESOLVABLE(record, marker, derivative);
-        } else {
-          (0, _assert.default)(false, 'walker: unknown aliasType ' + derivative.aliasType);
-        }
-      }
-    })();
-  }
+    const catchReadFile = file => {
+      if (near) return;
+      if (stage !== 0) return;
+      (0, _assert.default)((0, _common.isPackageJson)(file), 'walker: ' + file + ' must be package.json');
+      newPackage = file;
+      newMarker = undefined;
+      stage = 1;
+    };
 
-  step_STORE_ANY(record, marker, store) {
-    var _this6 = this;
+    const catchPackageFilter = (config, base) => {
+      if (near) return;
+      if (stage !== 1) return;
+      newMarker = {
+        config,
+        configPath: newPackage,
+        base
+      };
+      stage = 2;
+    };
 
-    return (0, _asyncToGenerator2.default)(function* () {
-      // eslint-disable-line camelcase
-      if (record[store] !== undefined) return;
-      record[store] = false; // default is discard
+    let newFile, failure;
 
-      _this6.append({
-        file: record.file,
-        store: _common.STORE_STAT
+    try {
+      newFile = await (0, _follow.follow)(derivative.alias, {
+        basedir: _path.default.dirname(record.file),
+        // default is extensions: ['.js'], but
+        // it is not enough because 'typos.json'
+        // is not taken in require('./typos')
+        // in 'normalize-package-data/lib/fixer.js'
+        extensions: ['.js', '.json', '.node'],
+        readFile: catchReadFile,
+        packageFilter: catchPackageFilter
       });
+    } catch (error) {
+      failure = error;
+    }
 
-      if ((0, _common.isDotNODE)(record.file)) {
-        // provide explicit deployFiles to override
-        // native addon deployment place. see 'sharp'
-        if (!marker.hasDeployFiles) {
-          _log.log.warn('Cannot include addon %1 into executable.', ['The addon must be distributed with executable as %2.', record.file, 'path-to-executable/' + _path.default.basename(record.file)]);
-        }
+    (0, _assert.default)(newPackage && newMarker || !newPackage && !newMarker, 'Probably, package.json is malformed');
 
+    if (newPackage) {
+      this.append({
+        file: newPackage,
+        marker: newMarker,
+        store: _common.STORE_CONTENT,
+        reason: record.file
+      });
+    }
+
+    if (failure) {
+      const {
+        toplevel
+      } = marker;
+      const mainNotFound = !newFile && newMarker;
+      const debug = !toplevel || derivative.mayExclude || mainNotFound && derivative.fromDependencies;
+      const level = debug ? 'debug' : 'warn';
+
+      if (mainNotFound) {
+        const message = 'Entry \'main\' not found in %1';
+
+        _log.log[level](message, ['%1: ' + newPackage, '%2: ' + record.file]);
+      } else {
+        _log.log[level](failure.message, ['%1: ' + record.file]);
+      }
+
+      return;
+    }
+
+    this.append({
+      file: newFile,
+      marker: newMarker || marker,
+      store: _common.STORE_BLOB,
+      reason: record.file
+    });
+  }
+
+  async stepDerivatives(record, marker, derivatives) {
+    for (const derivative of derivatives) {
+      if (_follow.natives[derivative.alias]) continue;
+
+      if (derivative.aliasType === _common.ALIAS_AS_RELATIVE) {
+        await this.stepDerivatives_ALIAS_AS_RELATIVE(record, marker, derivative);
+      } else if (derivative.aliasType === _common.ALIAS_AS_RESOLVABLE) {
+        await this.stepDerivatives_ALIAS_AS_RESOLVABLE(record, marker, derivative);
+      } else {
+        (0, _assert.default)(false, 'walker: unknown aliasType ' + derivative.aliasType);
+      }
+    }
+  }
+
+  async step_STORE_ANY(record, marker, store) {
+    // eslint-disable-line camelcase
+    if (record[store] !== undefined) return;
+    record[store] = false; // default is discard
+
+    this.append({
+      file: record.file,
+      store: _common.STORE_STAT
+    });
+
+    if ((0, _common.isDotNODE)(record.file)) {
+      // provide explicit deployFiles to override
+      // native addon deployment place. see 'sharp'
+      if (!marker.hasDeployFiles) {
+        _log.log.warn('Cannot include addon %1 into executable.', ['The addon must be distributed with executable as %2.', '%1: ' + record.file, '%2: path-to-executable/' + _path.default.basename(record.file)]);
+      }
+
+      return; // discard
+    }
+
+    const derivatives1 = [];
+    await this.stepActivate(marker, derivatives1);
+    await this.stepDerivatives(record, marker, derivatives1);
+
+    if (store === _common.STORE_BLOB) {
+      if (unlikelyJavascript(record.file)) {
+        this.append({
+          file: record.file,
+          marker,
+          store: _common.STORE_CONTENT
+        });
         return; // discard
       }
 
-      const derivatives1 = [];
-      yield _this6.stepActivate(marker, derivatives1);
-      yield _this6.stepDerivatives(record, marker, derivatives1);
-
-      if (store === _common.STORE_BLOB) {
-        if (unlikelyJavascript(record.file)) {
-          _this6.append({
-            file: record.file,
-            marker,
-            store: _common.STORE_CONTENT
-          });
-
-          return; // discard
-        }
-
-        if (marker.public || marker.hasDictionary) {
-          _this6.append({
-            file: record.file,
-            marker,
-            store: _common.STORE_CONTENT
-          });
-        }
+      if (marker.public || marker.hasDictionary) {
+        this.append({
+          file: record.file,
+          marker,
+          store: _common.STORE_CONTENT
+        });
       }
+    }
 
-      if (store === _common.STORE_BLOB || _this6.hasPatch(record)) {
-        if (!record.body) {
-          yield _this6.stepRead(record);
-
-          _this6.stepPatch(record);
-
-          if (store === _common.STORE_BLOB) {
-            _this6.stepStrip(record);
-          }
-        }
+    if (store === _common.STORE_BLOB || this.hasPatch(record)) {
+      if (!record.body) {
+        await this.stepRead(record);
+        this.stepPatch(record);
 
         if (store === _common.STORE_BLOB) {
-          const derivatives2 = [];
-
-          _this6.stepDetect(record, marker, derivatives2);
-
-          yield _this6.stepDerivatives(record, marker, derivatives2);
+          this.stepStrip(record);
         }
       }
 
-      record[store] = true;
-    })();
+      if (store === _common.STORE_BLOB) {
+        const derivatives2 = [];
+        this.stepDetect(record, marker, derivatives2);
+        await this.stepDerivatives(record, marker, derivatives2);
+      }
+    }
+
+    record[store] = true;
   }
 
   step_STORE_LINKS(record, data) {
@@ -684,131 +653,107 @@ class Walker {
     });
   }
 
-  step_STORE_STAT(record) {
-    var _this7 = this;
+  async step_STORE_STAT(record) {
+    // eslint-disable-line camelcase
+    if (record[_common.STORE_STAT]) return;
 
-    return (0, _asyncToGenerator2.default)(function* () {
-      // eslint-disable-line camelcase
-      if (record[_common.STORE_STAT]) return;
+    try {
+      record[_common.STORE_STAT] = await _fsExtra.default.stat(record.file);
+    } catch (error) {
+      _log.log.error('Cannot stat, ' + error.code, record.file);
 
-      try {
-        record[_common.STORE_STAT] = yield _fsExtra.default.stat(record.file);
-      } catch (error) {
-        _log.log.error('Cannot stat, ' + error.code, record.file);
+      throw (0, _log.wasReported)(error);
+    }
 
-        throw (0, _log.wasReported)(error);
-      }
-
-      if (_path.default.dirname(record.file) !== record.file) {
-        // root directory
-        _this7.append({
-          file: _path.default.dirname(record.file),
-          store: _common.STORE_LINKS,
-          data: _path.default.basename(record.file)
-        });
-      }
-    })();
-  }
-
-  step(task) {
-    var _this8 = this;
-
-    return (0, _asyncToGenerator2.default)(function* () {
-      const {
-        file,
-        store,
-        data
-      } = task;
-      const record = _this8.records[file];
-
-      if (store === _common.STORE_BLOB || store === _common.STORE_CONTENT) {
-        yield _this8.step_STORE_ANY(record, task.marker, store);
-      } else if (store === _common.STORE_LINKS) {
-        _this8.step_STORE_LINKS(record, data);
-      } else if (store === _common.STORE_STAT) {
-        yield _this8.step_STORE_STAT(record);
-      } else {
-        (0, _assert.default)(false, 'walker: unknown store ' + store);
-      }
-    })();
-  }
-
-  readDictionary() {
-    var _this9 = this;
-
-    return (0, _asyncToGenerator2.default)(function* () {
-      const dd = _path.default.join(__dirname, '../dictionary');
-
-      const files = yield _fsExtra.default.readdir(dd);
-
-      for (const file of files) {
-        if (/\.js$/.test(file)) {
-          const name = file.slice(0, -3);
-
-          const config = require(_path.default.join(dd, file));
-
-          _this9.dictionary[name] = config;
-        }
-      }
-    })();
-  }
-
-  start(marker, entrypoint, addition, params) {
-    var _this10 = this;
-
-    return (0, _asyncToGenerator2.default)(function* () {
-      _this10.tasks = [];
-      _this10.records = {};
-      _this10.ignoredFiles = [];
-      _this10.dictionary = {};
-      _this10.patches = {};
-      _this10.params = params;
-
-      if (marker && marker.config && marker.config.pkg && marker.config.pkg.ignore) {
-        _this10.ignoredFiles = expandFiles(marker.config.pkg.ignore, marker.base);
-      }
-
-      yield _this10.readDictionary();
-
-      _this10.append({
-        file: entrypoint,
-        marker,
-        store: _common.STORE_BLOB
+    if (_path.default.dirname(record.file) !== record.file) {
+      // root directory
+      this.append({
+        file: _path.default.dirname(record.file),
+        store: _common.STORE_LINKS,
+        data: _path.default.basename(record.file)
       });
+    }
+  }
 
-      if (addition) {
-        _this10.append({
-          file: addition,
-          marker,
-          store: _common.STORE_CONTENT
-        });
+  async step(task) {
+    const {
+      file,
+      store,
+      data
+    } = task;
+    const record = this.records[file];
+
+    if (store === _common.STORE_BLOB || store === _common.STORE_CONTENT) {
+      await this.step_STORE_ANY(record, task.marker, store);
+    } else if (store === _common.STORE_LINKS) {
+      this.step_STORE_LINKS(record, data);
+    } else if (store === _common.STORE_STAT) {
+      await this.step_STORE_STAT(record);
+    } else {
+      (0, _assert.default)(false, 'walker: unknown store ' + store);
+    }
+  }
+
+  async readDictionary() {
+    const dd = _path.default.join(__dirname, '../dictionary');
+
+    const files = await _fsExtra.default.readdir(dd);
+
+    for (const file of files) {
+      if (/\.js$/.test(file)) {
+        const name = file.slice(0, -3);
+
+        const config = require(_path.default.join(dd, file));
+
+        this.dictionary[name] = config;
       }
+    }
+  }
 
-      const tasks = _this10.tasks;
+  async start(marker, entrypoint, addition, params) {
+    this.tasks = [];
+    this.records = {};
+    this.ignoredFiles = [];
+    this.dictionary = {};
+    this.patches = {};
+    this.params = params;
 
-      for (let i = 0; i < tasks.length; i += 1) {
-        // NO MULTIPLE WORKERS! THIS WILL LEAD TO NON-DETERMINISTIC
-        // ORDER. one-by-one fifo is the only way to iterate tasks
-        yield _this10.step(tasks[i]);
-      }
+    if (marker && marker.config && marker.config.pkg && marker.config.pkg.ignore) {
+      this.ignoredFiles = expandFiles(marker.config.pkg.ignore, marker.base);
+    }
 
-      return {
-        records: _this10.records,
-        entrypoint: (0, _common.normalizePath)(entrypoint)
-      };
-    })();
+    await this.readDictionary();
+    this.append({
+      file: entrypoint,
+      marker,
+      store: _common.STORE_BLOB
+    });
+
+    if (addition) {
+      this.append({
+        file: addition,
+        marker,
+        store: _common.STORE_CONTENT
+      });
+    }
+
+    const tasks = this.tasks;
+
+    for (let i = 0; i < tasks.length; i += 1) {
+      // NO MULTIPLE WORKERS! THIS WILL LEAD TO NON-DETERMINISTIC
+      // ORDER. one-by-one fifo is the only way to iterate tasks
+      await this.step(tasks[i]);
+    }
+
+    return {
+      records: this.records,
+      entrypoint: (0, _common.normalizePath)(entrypoint)
+    };
   }
 
 }
 
-function _default() {
-  return _ref.apply(this, arguments);
-}
-
-function _ref() {
-  _ref = (0, _asyncToGenerator2.default)(function* (...args) {
-    const w = new Walker();
-    return yield w.start(...args);
-  });
-  return _ref.apply(this, arguments);
+async function _default(...args) {
+  const w = new Walker();
+  return await w.start(...args);
 }

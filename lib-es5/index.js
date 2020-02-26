@@ -1,13 +1,9 @@
 "use strict";
 
-var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault");
-
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.exec = exec;
-
-var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
 
 var _fsExtra = require("fs-extra");
 
@@ -38,6 +34,8 @@ var _fabricator = require("./fabricator.js");
 var _package = require("../package.json");
 
 var _walker = _interopRequireDefault(require("./walker.js"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /* eslint-disable require-atomic-updates */
 function isConfiguration(file) {
@@ -159,388 +157,367 @@ function fabricatorForTarget(target) {
 
 const dryRunResults = {};
 
-function needWithDryRun(_x) {
-  return _needWithDryRun.apply(this, arguments);
-}
-
-function _needWithDryRun() {
-  _needWithDryRun = (0, _asyncToGenerator2.default)(function* (target) {
-    const target2 = Object.assign({
-      dryRun: true
-    }, target);
-    const result = yield (0, _pkgFetch.need)(target2);
-    (0, _assert.default)(['exists', 'fetched', 'built'].indexOf(result) >= 0);
-    dryRunResults[result] = true;
-  });
-  return _needWithDryRun.apply(this, arguments);
+async function needWithDryRun(target) {
+  const target2 = Object.assign({
+    dryRun: true
+  }, target);
+  const result = await (0, _pkgFetch.need)(target2);
+  (0, _assert.default)(['exists', 'fetched', 'built'].indexOf(result) >= 0);
+  dryRunResults[result] = true;
 }
 
 const targetsCache = {};
 
-function needViaCache(_x2) {
-  return _needViaCache.apply(this, arguments);
+async function needViaCache(target) {
+  const s = stringifyTarget(target);
+  let c = targetsCache[s];
+  if (c) return c;
+  c = await (0, _pkgFetch.need)(target);
+  targetsCache[s] = c;
+  return c;
 }
 
-function _needViaCache() {
-  _needViaCache = (0, _asyncToGenerator2.default)(function* (target) {
-    const s = stringifyTarget(target);
-    let c = targetsCache[s];
-    if (c) return c;
-    c = yield (0, _pkgFetch.need)(target);
-    targetsCache[s] = c;
-    return c;
+async function exec(argv2) {
+  // eslint-disable-line complexity
+  const argv = (0, _minimist.default)(argv2, {
+    boolean: ['b', 'build', 'bytecode', 'd', 'debug', 'h', 'help', 'public', 'v', 'version', 'externalModules'],
+    string: ['_', 'c', 'config', 'o', 'options', 'output', 'outdir', 'out-dir', 'out-path', 'public-packages', 't', 'target', 'targets'],
+    default: {
+      bytecode: true
+    }
   });
-  return _needViaCache.apply(this, arguments);
-}
 
-function exec(_x3) {
-  return _exec.apply(this, arguments);
-}
-
-function _exec() {
-  _exec = (0, _asyncToGenerator2.default)(function* (argv2) {
-    // eslint-disable-line complexity
-    const argv = (0, _minimist.default)(argv2, {
-      boolean: ['b', 'build', 'bytecode', 'd', 'debug', 'h', 'help', 'public', 'v', 'version', 'externalModules'],
-      string: ['_', 'c', 'config', 'o', 'options', 'output', 'outdir', 'out-dir', 'out-path', 'public-packages', 't', 'target', 'targets'],
-      default: {
-        bytecode: true
-      }
-    });
-
-    if (argv.h || argv.help) {
-      (0, _help.default)();
-      return;
-    } // version
+  if (argv.h || argv.help) {
+    (0, _help.default)();
+    return;
+  } // version
 
 
-    if (argv.v || argv.version) {
-      console.log(_package.version);
-      return;
-    }
+  if (argv.v || argv.version) {
+    console.log(_package.version);
+    return;
+  }
 
-    _log.log.info(`pkg@${_package.version}`); // debug
-
-
-    _log.log.debugMode = argv.d || argv.debug; // forceBuild
-
-    const forceBuild = argv.b || argv.build; // _
-
-    if (!argv._.length) {
-      throw (0, _log.wasReported)('Entry file/directory is expected', ['Pass --help to see usage information']);
-    }
-
-    if (argv._.length > 1) {
-      throw (0, _log.wasReported)('Not more than one entry file/directory is expected');
-    } // input
+  _log.log.info(`pkg@${_package.version}`); // debug
 
 
-    let input = _path.default.resolve(argv._[0]);
+  _log.log.debugMode = argv.d || argv.debug; // forceBuild
 
-    if (!(yield (0, _fsExtra.exists)(input))) {
+  const forceBuild = argv.b || argv.build; // _
+
+  if (!argv._.length) {
+    throw (0, _log.wasReported)('Entry file/directory is expected', ['Pass --help to see usage information']);
+  }
+
+  if (argv._.length > 1) {
+    throw (0, _log.wasReported)('Not more than one entry file/directory is expected');
+  } // input
+
+
+  let input = _path.default.resolve(argv._[0]);
+
+  if (!(await (0, _fsExtra.exists)(input))) {
+    throw (0, _log.wasReported)('Input file does not exist', [input]);
+  }
+
+  if ((await (0, _fsExtra.stat)(input)).isDirectory()) {
+    input = _path.default.join(input, 'package.json');
+
+    if (!(await (0, _fsExtra.exists)(input))) {
       throw (0, _log.wasReported)('Input file does not exist', [input]);
     }
+  } // inputJson
 
-    if ((yield (0, _fsExtra.stat)(input)).isDirectory()) {
-      input = _path.default.join(input, 'package.json');
 
-      if (!(yield (0, _fsExtra.exists)(input))) {
-        throw (0, _log.wasReported)('Input file does not exist', [input]);
+  let inputJson, inputJsonName;
+
+  if (isConfiguration(input)) {
+    inputJson = JSON.parse((await (0, _fsExtra.readFile)(input)));
+    inputJsonName = inputJson.name;
+
+    if (inputJsonName) {
+      inputJsonName = inputJsonName.split('/').pop(); // @org/foo
+    }
+  } // inputBin
+
+
+  let inputBin;
+
+  if (inputJson) {
+    let bin = inputJson.bin;
+
+    if (bin) {
+      if (typeof bin === 'object') {
+        if (bin[inputJsonName]) {
+          bin = bin[inputJsonName];
+        } else {
+          bin = bin[Object.keys(bin)[0]]; // TODO multiple inputs to pkg them all?
+        }
       }
-    } // inputJson
 
+      inputBin = _path.default.resolve(_path.default.dirname(input), bin);
 
-    let inputJson, inputJsonName;
-
-    if (isConfiguration(input)) {
-      inputJson = JSON.parse((yield (0, _fsExtra.readFile)(input)));
-      inputJsonName = inputJson.name;
-
-      if (inputJsonName) {
-        inputJsonName = inputJsonName.split('/').pop(); // @org/foo
+      if (!(await (0, _fsExtra.exists)(inputBin))) {
+        throw (0, _log.wasReported)('Bin file does not exist (taken from package.json ' + '\'bin\' property)', [inputBin]);
       }
-    } // inputBin
+    }
+  }
+
+  if (inputJson && !inputBin) {
+    throw (0, _log.wasReported)('Property \'bin\' does not exist in', [input]);
+  } // inputFin
 
 
-    let inputBin;
+  const inputFin = inputBin || input; // config
+
+  let config = argv.c || argv.config;
+
+  if (inputJson && config) {
+    throw (0, _log.wasReported)('Specify either \'package.json\' or config. Not both');
+  } // configJson
+
+
+  let configJson;
+
+  if (config) {
+    config = _path.default.resolve(config);
+
+    if (!(await (0, _fsExtra.exists)(config))) {
+      throw (0, _log.wasReported)('Config file does not exist', [config]);
+    }
+
+    configJson = require(config); // may be either json or js
+
+    if (!configJson.name && !configJson.files && !configJson.dependencies && !configJson.pkg) {
+      // package.json not detected
+      configJson = {
+        pkg: configJson
+      };
+    }
+  } // output, outputPath
+
+
+  let output = argv.o || argv.output;
+  const outputPath = argv['out-path'] || argv.outdir || argv['out-dir'];
+  let autoOutput = false;
+
+  if (output && outputPath) {
+    throw (0, _log.wasReported)('Specify either \'output\' or \'out-path\'. Not both');
+  }
+
+  if (!output) {
+    let name;
 
     if (inputJson) {
-      let bin = inputJson.bin;
-
-      if (bin) {
-        if (typeof bin === 'object') {
-          if (bin[inputJsonName]) {
-            bin = bin[inputJsonName];
-          } else {
-            bin = bin[Object.keys(bin)[0]]; // TODO multiple inputs to pkg them all?
-          }
-        }
-
-        inputBin = _path.default.resolve(_path.default.dirname(input), bin);
-
-        if (!(yield (0, _fsExtra.exists)(inputBin))) {
-          throw (0, _log.wasReported)('Bin file does not exist (taken from package.json ' + '\'bin\' property)', [inputBin]);
-        }
-      }
-    }
-
-    if (inputJson && !inputBin) {
-      throw (0, _log.wasReported)('Property \'bin\' does not exist in', [input]);
-    } // inputFin
-
-
-    const inputFin = inputBin || input; // config
-
-    let config = argv.c || argv.config;
-
-    if (inputJson && config) {
-      throw (0, _log.wasReported)('Specify either \'package.json\' or config. Not both');
-    } // configJson
-
-
-    let configJson;
-
-    if (config) {
-      config = _path.default.resolve(config);
-
-      if (!(yield (0, _fsExtra.exists)(config))) {
-        throw (0, _log.wasReported)('Config file does not exist', [config]);
-      }
-
-      configJson = require(config); // may be either json or js
-
-      if (!configJson.name && !configJson.files && !configJson.dependencies && !configJson.pkg) {
-        // package.json not detected
-        configJson = {
-          pkg: configJson
-        };
-      }
-    } // output, outputPath
-
-
-    let output = argv.o || argv.output;
-    const outputPath = argv['out-path'] || argv.outdir || argv['out-dir'];
-    let autoOutput = false;
-
-    if (output && outputPath) {
-      throw (0, _log.wasReported)('Specify either \'output\' or \'out-path\'. Not both');
-    }
-
-    if (!output) {
-      let name;
-
-      if (inputJson) {
-        name = inputJsonName;
-
-        if (!name) {
-          throw (0, _log.wasReported)('Property \'name\' does not exist in', [argv._[0]]);
-        }
-      } else if (configJson) {
-        name = configJson.name;
-      }
+      name = inputJsonName;
 
       if (!name) {
-        name = _path.default.basename(inputFin);
+        throw (0, _log.wasReported)('Property \'name\' does not exist in', [argv._[0]]);
       }
+    } else if (configJson) {
+      name = configJson.name;
+    }
 
-      autoOutput = true;
+    if (!name) {
+      name = _path.default.basename(inputFin);
+    }
 
-      const ext = _path.default.extname(name);
+    autoOutput = true;
 
-      output = name.slice(0, -ext.length || undefined);
-      output = _path.default.resolve(outputPath || '', output);
+    const ext = _path.default.extname(name);
+
+    output = name.slice(0, -ext.length || undefined);
+    output = _path.default.resolve(outputPath || '', output);
+  } else {
+    output = _path.default.resolve(output);
+  } // targets
+
+
+  const sTargets = argv.t || argv.target || argv.targets || '';
+
+  if (typeof sTargets !== 'string') {
+    throw (0, _log.wasReported)(`Something is wrong near ${JSON.stringify(sTargets)}`);
+  }
+
+  let targets = parseTargets(sTargets.split(',').filter(t => t));
+
+  if (!targets.length) {
+    let jsonTargets;
+
+    if (inputJson && inputJson.pkg) {
+      jsonTargets = inputJson.pkg.targets;
+    } else if (configJson && configJson.pkg) {
+      jsonTargets = configJson.pkg.targets;
+    }
+
+    if (jsonTargets) {
+      targets = parseTargets(jsonTargets);
+    }
+  }
+
+  if (!targets.length) {
+    if (!autoOutput) {
+      targets = parseTargets(['host']);
+      (0, _assert.default)(targets.length === 1);
     } else {
-      output = _path.default.resolve(output);
-    } // targets
-
-
-    const sTargets = argv.t || argv.target || argv.targets || '';
-
-    if (typeof sTargets !== 'string') {
-      throw (0, _log.wasReported)(`Something is wrong near ${JSON.stringify(sTargets)}`);
+      targets = parseTargets(['linux', 'macos', 'win']);
     }
 
-    let targets = parseTargets(sTargets.split(',').filter(t => t));
-
-    if (!targets.length) {
-      let jsonTargets;
-
-      if (inputJson && inputJson.pkg) {
-        jsonTargets = inputJson.pkg.targets;
-      } else if (configJson && configJson.pkg) {
-        jsonTargets = configJson.pkg.targets;
-      }
-
-      if (jsonTargets) {
-        targets = parseTargets(jsonTargets);
-      }
-    }
-
-    if (!targets.length) {
-      if (!autoOutput) {
-        targets = parseTargets(['host']);
-        (0, _assert.default)(targets.length === 1);
-      } else {
-        targets = parseTargets(['linux', 'macos', 'win']);
-      }
-
-      _log.log.info('Targets not specified. Assuming:', `${targets.map(stringifyTarget).join(', ')}`);
-    } // differentParts
+    _log.log.info('Targets not specified. Assuming:', `${targets.map(stringifyTarget).join(', ')}`);
+  } // differentParts
 
 
-    const different = differentParts(targets); // targets[].output
+  const different = differentParts(targets); // targets[].output
 
-    for (const target of targets) {
-      let file;
+  for (const target of targets) {
+    let file;
 
-      if (targets.length === 1) {
-        file = output;
-      } else {
-        file = stringifyTargetForOutput(output, target, different);
-      }
-
-      if (target.platform === 'win' && _path.default.extname(file) !== '.exe') file += '.exe';
-      target.output = file;
-    } // bakes
-
-
-    const bakes = (argv.options || '').split(',').filter(bake => bake).map(bake => '--' + bake); // check if input is going
-    // to be overwritten by output
-
-    for (const target of targets) {
-      if (target.output === inputFin) {
-        if (autoOutput) {
-          target.output += '-' + target.platform;
-        } else {
-          throw (0, _log.wasReported)('Refusing to overwrite input file', [inputFin]);
-        }
-      }
-    } // fetch targets
-
-
-    const {
-      bytecode
-    } = argv;
-
-    for (const target of targets) {
-      target.forceBuild = forceBuild;
-      yield needWithDryRun(target);
-      const f = target.fabricator = fabricatorForTarget(target);
-      f.forceBuild = forceBuild;
-
-      if (bytecode) {
-        yield needWithDryRun(f);
-      }
-    }
-
-    if (dryRunResults.fetched && !dryRunResults.built) {
-      _log.log.info('Fetching base Node.js binaries to PKG_CACHE_PATH');
-    }
-
-    for (const target of targets) {
-      target.binaryPath = yield needViaCache(target);
-      const f = target.fabricator;
-
-      if (bytecode) {
-        f.binaryPath = yield needViaCache(f);
-
-        if (f.platform !== 'win') {
-          yield (0, _chmod.plusx)(f.binaryPath);
-        }
-      }
-    } // marker
-
-
-    let marker;
-
-    if (configJson) {
-      marker = {
-        config: configJson,
-        base: _path.default.dirname(config),
-        configPath: config
-      };
+    if (targets.length === 1) {
+      file = output;
     } else {
-      marker = {
-        config: inputJson || {},
-        // not `inputBin` because only `input`
-        base: _path.default.dirname(input),
-        // is the place for `inputJson`
-        configPath: input
-      };
+      file = stringifyTargetForOutput(output, target, different);
     }
 
-    marker.toplevel = true; // public
+    if (target.platform === 'win' && _path.default.extname(file) !== '.exe') file += '.exe';
+    target.output = file;
+  } // bakes
 
-    const params = {};
 
-    if (argv.public) {
-      params.publicToplevel = true;
-    }
+  const bakes = (argv.options || '').split(',').filter(bake => bake).map(bake => '--' + bake); // check if input is going
+  // to be overwritten by output
 
-    if (argv['public-packages']) {
-      params.publicPackages = argv['public-packages'].split(',');
-
-      if (params.publicPackages.indexOf('*') !== -1) {
-        params.publicPackages = ['*'];
+  for (const target of targets) {
+    if (target.output === inputFin) {
+      if (autoOutput) {
+        target.output += '-' + target.platform;
+      } else {
+        throw (0, _log.wasReported)('Refusing to overwrite input file', [inputFin]);
       }
-    } // records
+    }
+  } // fetch targets
 
 
-    let records;
-    let entrypoint = inputFin;
-    const addition = isConfiguration(input) ? input : undefined;
-    const walkResult = yield (0, _walker.default)(marker, entrypoint, addition, params);
-    entrypoint = walkResult.entrypoint;
-    records = walkResult.records;
-    const refineResult = (0, _refiner.default)(records, entrypoint);
-    entrypoint = refineResult.entrypoint;
-    records = refineResult.records;
-    let baseDir;
+  const {
+    bytecode
+  } = argv;
 
-    if (argv.externalModules === true) {
-      _log.log.debug('Require of external modules will be allowed..');
+  for (const target of targets) {
+    target.forceBuild = forceBuild;
+    await needWithDryRun(target);
+    const f = target.fabricator = fabricatorForTarget(target);
+    f.forceBuild = forceBuild;
 
-      baseDir = Object.keys(records).find(pathKey => records[pathKey].file === marker.base);
+    if (bytecode) {
+      await needWithDryRun(f);
+    }
+  }
+
+  if (dryRunResults.fetched && !dryRunResults.built) {
+    _log.log.info('Fetching base Node.js binaries to PKG_CACHE_PATH');
+  }
+
+  for (const target of targets) {
+    target.binaryPath = await needViaCache(target);
+    const f = target.fabricator;
+
+    if (bytecode) {
+      f.binaryPath = await needViaCache(f);
+
+      if (f.platform !== 'win') {
+        await (0, _chmod.plusx)(f.binaryPath);
+      }
+    }
+  } // marker
+
+
+  let marker;
+
+  if (configJson) {
+    marker = {
+      config: configJson,
+      base: _path.default.dirname(config),
+      configPath: config
+    };
+  } else {
+    marker = {
+      config: inputJson || {},
+      // not `inputBin` because only `input`
+      base: _path.default.dirname(input),
+      // is the place for `inputJson`
+      configPath: input
+    };
+  }
+
+  marker.toplevel = true; // public
+
+  const params = {};
+
+  if (argv.public) {
+    params.publicToplevel = true;
+  }
+
+  if (argv['public-packages']) {
+    params.publicPackages = argv['public-packages'].split(',');
+
+    if (params.publicPackages.indexOf('*') !== -1) {
+      params.publicPackages = ['*'];
+    }
+  } // records
+
+
+  let records;
+  let entrypoint = inputFin;
+  const addition = isConfiguration(input) ? input : undefined;
+  const walkResult = await (0, _walker.default)(marker, entrypoint, addition, params);
+  entrypoint = walkResult.entrypoint;
+  records = walkResult.records;
+  const refineResult = (0, _refiner.default)(records, entrypoint);
+  entrypoint = refineResult.entrypoint;
+  records = refineResult.records;
+  let baseDir;
+
+  if (argv.externalModules === true) {
+    _log.log.debug('Require of external modules will be allowed..');
+
+    baseDir = Object.keys(records).find(pathKey => records[pathKey].file === marker.base);
+  }
+
+  const backpack = (0, _packer.default)({
+    records,
+    entrypoint,
+    bytecode
+  });
+
+  _log.log.debug('Targets:', JSON.stringify(targets, null, 2));
+
+  for (const target of targets) {
+    if (await (0, _fsExtra.exists)(target.output)) {
+      if ((await (0, _fsExtra.stat)(target.output)).isFile()) {
+        await (0, _fsExtra.remove)(target.output);
+      } else {
+        throw (0, _log.wasReported)('Refusing to overwrite non-file output', [target.output]);
+      }
+    } else {
+      await (0, _fsExtra.mkdirp)(_path.default.dirname(target.output));
     }
 
-    const backpack = (0, _packer.default)({
-      records,
-      entrypoint,
-      bytecode
+    const vfsOutput = argv.vfsOutput ? _path.default.resolve(argv.vfsOutput) : undefined;
+    const vfsFullOutput = argv.vfsFullOutput ? _path.default.resolve(argv.vfsFullOutput) : undefined;
+    const slash = target.platform === 'win' ? '\\' : '/';
+    await (0, _producer.default)({
+      backpack,
+      vfsOutput,
+      vfsFullOutput,
+      bakes,
+      baseDir,
+      slash,
+      target
     });
 
-    _log.log.debug('Targets:', JSON.stringify(targets, null, 2));
-
-    for (const target of targets) {
-      if (yield (0, _fsExtra.exists)(target.output)) {
-        if ((yield (0, _fsExtra.stat)(target.output)).isFile()) {
-          yield (0, _fsExtra.remove)(target.output);
-        } else {
-          throw (0, _log.wasReported)('Refusing to overwrite non-file output', [target.output]);
-        }
-      } else {
-        yield (0, _fsExtra.mkdirp)(_path.default.dirname(target.output));
-      }
-
-      const vfsOutput = argv.vfsOutput ? _path.default.resolve(argv.vfsOutput) : undefined;
-      const vfsFullOutput = argv.vfsFullOutput ? _path.default.resolve(argv.vfsFullOutput) : undefined;
-      const slash = target.platform === 'win' ? '\\' : '/';
-      yield (0, _producer.default)({
-        backpack,
-        vfsOutput,
-        vfsFullOutput,
-        bakes,
-        baseDir,
-        slash,
-        target
-      });
-
-      if (target.platform !== 'win') {
-        yield (0, _chmod.plusx)(target.output);
-      }
+    if (target.platform !== 'win') {
+      await (0, _chmod.plusx)(target.output);
     }
+  }
 
-    (0, _fabricator.shutdown)();
-  });
-  return _exec.apply(this, arguments);
+  (0, _fabricator.shutdown)();
 }

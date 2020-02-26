@@ -1,7 +1,5 @@
 "use strict";
 
-var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault");
-
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
@@ -22,6 +20,8 @@ var _fs = _interopRequireDefault(require("fs"));
 var _intoStream = _interopRequireDefault(require("into-stream"));
 
 var _streamMeter = _interopRequireDefault(require("stream-meter"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function discoverPlaceholder(binaryBuffer, searchString, padder) {
   const placeholder = Buffer.from(searchString);
